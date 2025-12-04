@@ -147,6 +147,38 @@ function getFixVersion(packageName) {
 }
 
 /**
+ * Check if project uses static export
+ */
+function isStaticExport(projectPath) {
+  const configFiles = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
+
+  for (const configFile of configFiles) {
+    const configPath = path.join(projectPath, configFile);
+    if (fs.existsSync(configPath)) {
+      try {
+        const content = fs.readFileSync(configPath, 'utf8');
+        if (content.includes("output: 'export'") || content.includes('output: "export"')) {
+          return true;
+        }
+      } catch (error) {
+        // Ignore read errors
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Get React major version
+ */
+function getReactMajorVersion(version) {
+  if (!version) return null;
+  const cleaned = version.replace(/^[\^~>=<]/, '');
+  const parsed = parseVersion(cleaned);
+  return parsed.major;
+}
+
+/**
  * Scan a single project
  */
 function scanProject(projectPath) {
@@ -155,7 +187,8 @@ function scanProject(projectPath) {
     vulnerable: false,
     packages: [],
     packageManager: null,
-    fixCommands: []
+    fixCommands: [],
+    warnings: []
   };
 
   const packageJsonPath = path.join(projectPath, 'package.json');
@@ -172,6 +205,13 @@ function scanProject(projectPath) {
       ...packageJson.devDependencies
     };
 
+    // Get React version
+    const reactVersion = allDeps['react'];
+    const reactMajor = getReactMajorVersion(reactVersion);
+
+    // Check if static export
+    const isStatic = isStaticExport(projectPath);
+
     // Determine package manager
     if (fs.existsSync(path.join(projectPath, 'yarn.lock'))) {
       result.packageManager = 'yarn';
@@ -184,7 +224,33 @@ function scanProject(projectPath) {
     // Check each package
     Object.keys(VULNERABILITY.vulnerable).forEach(pkgName => {
       const version = allDeps[pkgName];
-      if (version && isVersionVulnerable(pkgName, version)) {
+      if (!version) return;
+
+      // Special handling for Next.js - only vulnerable if React 19 is present
+      if (pkgName === 'next') {
+        if (isVersionVulnerable(pkgName, version)) {
+          // Next.js version is in vulnerable range, but check React version
+          if (reactMajor !== 19) {
+            result.warnings.push(`Next.js ${version} is in vulnerable range, but using React ${reactMajor || 'unknown'} (safe - only React 19 affected)`);
+            return; // Not vulnerable - React 19 not present
+          }
+
+          // Check if static export
+          if (isStatic) {
+            result.warnings.push(`Next.js ${version} with React 19 detected, but using static export (likely safe - no Server Components)`);
+            return; // Likely not vulnerable - static export doesn't use Server Components
+          }
+
+          // Both React 19 and Server Components likely present
+          result.vulnerable = true;
+          result.packages.push({
+            name: pkgName,
+            version: version,
+            fixVersion: getFixVersion(pkgName)
+          });
+        }
+      } else if (isVersionVulnerable(pkgName, version)) {
+        // For React and react-server-dom-* packages, directly flag
         result.vulnerable = true;
         result.packages.push({
           name: pkgName,
@@ -300,6 +366,19 @@ function formatOutput(results) {
     });
   } else {
     output += `${COLORS.green}${COLORS.bold}✓ No vulnerable projects found${COLORS.reset}\n\n`;
+  }
+
+  // Show warnings for projects with concerning patterns
+  const projectsWithWarnings = results.filter(r => r.warnings && r.warnings.length > 0);
+  if (projectsWithWarnings.length > 0) {
+    output += `${COLORS.yellow}${COLORS.bold}ℹ Projects with analysis notes:${COLORS.reset}\n\n`;
+    projectsWithWarnings.forEach((result, idx) => {
+      output += `${COLORS.dim}${idx + 1}. ${result.path}${COLORS.reset}\n`;
+      result.warnings.forEach(warning => {
+        output += `   ${COLORS.yellow}ℹ${COLORS.reset} ${warning}\n`;
+      });
+      output += '\n';
+    });
   }
 
   // Footer with references
