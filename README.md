@@ -284,9 +284,31 @@ The scanner performs the following checks:
    - React 19.0.0, 19.1.0, 19.1.1, 19.2.0
    - React Server DOM packages (same versions)
    - Next.js version ranges (14.3.x, 15.x, 16.x)
-4. **Detects package manager** (npm, yarn, or pnpm)
-5. **Generates fix commands** with appropriate upgrade syntax
-6. **Reports findings** in human-readable or JSON format
+4. **Validates actual vulnerability** by checking:
+   - React version (only React 19 is affected - React 18 is safe)
+   - Configuration (static exports don't use Server Components)
+5. **Detects package manager** (npm, yarn, or pnpm)
+6. **Generates fix commands** with appropriate upgrade syntax
+7. **Reports findings** in human-readable or JSON format
+
+### Accuracy Features
+
+The scanner includes intelligent detection to prevent false positives:
+
+- **React Version Check**: Next.js apps are only flagged if React 19 is present (React 18 is safe)
+- **Static Export Detection**: Projects using `output: 'export'` are marked as likely safe
+- **Contextual Warnings**: Provides explanations for why projects are or aren't vulnerable
+- **Conservative Approach**: Warns about edge cases that may need manual review
+
+**Example Output:**
+```
+✓ No vulnerable projects found
+
+ℹ Projects with analysis notes:
+
+1. /path/to/project
+   ℹ Next.js ^15.1.3 is in vulnerable range, but using React 18 (safe - only React 19 affected)
+```
 
 ## Remediation
 
@@ -336,7 +358,9 @@ A: Currently, the scanner checks direct dependencies in `package.json`. For deep
 
 ### Q: I'm on React 18, am I affected?
 
-A: No, only React 19.x versions are affected. However, if you use Next.js 15.x or 16.x, you may have React 19 as a transitive dependency.
+A: **No, React 18 is NOT affected** by CVE-2025-55182. This vulnerability only affects React 19.x Server Components.
+
+The scanner will correctly identify React 18 apps as safe, even if using Next.js 15.x or 16.x versions that are in the vulnerable range. The key requirement is that React 19 must be present for the vulnerability to exist.
 
 ### Q: Can I use this in my automated build pipeline?
 
