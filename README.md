@@ -83,7 +83,7 @@ sudo yum install jq
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/cve-2025-55182-scanner.git
+git clone https://github.com/nxgn-kd01/cve-2025-55182-scanner.git
 cd cve-2025-55182-scanner
 
 # Make scripts executable
@@ -93,11 +93,11 @@ chmod +x scan.sh scan.js
 Or download individual scripts:
 ```bash
 # Bash version
-curl -O https://raw.githubusercontent.com/YOUR_USERNAME/cve-2025-55182-scanner/main/scan.sh
+curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.sh
 chmod +x scan.sh
 
 # Node.js version
-curl -O https://raw.githubusercontent.com/YOUR_USERNAME/cve-2025-55182-scanner/main/scan.js
+curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.js
 chmod +x scan.js
 ```
 
@@ -255,7 +255,7 @@ jobs:
 
       - name: Download CVE-2025-55182 Scanner
         run: |
-          curl -O https://raw.githubusercontent.com/YOUR_USERNAME/cve-2025-55182-scanner/main/scan.js
+          curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.js
           chmod +x scan.js
 
       - name: Scan for vulnerabilities
@@ -268,7 +268,7 @@ security-scan:
   stage: test
   image: node:18
   script:
-    - curl -O https://raw.githubusercontent.com/YOUR_USERNAME/cve-2025-55182-scanner/main/scan.js
+    - curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.js
     - chmod +x scan.js
     - node scan.js --ci
   allow_failure: false
