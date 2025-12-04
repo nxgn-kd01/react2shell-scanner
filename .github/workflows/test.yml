@@ -1,0 +1,98 @@
+name: Test Scanner
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-nodejs:
+    name: Test Node.js Scanner
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Test Node.js scanner help
+        run: node scan.js --help
+
+      - name: Test Node.js scanner on self
+        run: node scan.js .
+
+      - name: Test Node.js scanner JSON output
+        run: node scan.js --json
+
+  test-bash:
+    name: Test Bash Scanner
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Make scripts executable
+        run: chmod +x scan.sh
+
+      - name: Test Bash scanner help
+        run: ./scan.sh --help
+
+      - name: Test Bash scanner on self
+        run: ./scan.sh .
+
+      - name: Test Bash scanner JSON output
+        run: ./scan.sh --json
+
+  test-macos:
+    name: Test on macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: brew install jq
+
+      - name: Make scripts executable
+        run: chmod +x scan.sh scan.js
+
+      - name: Test Node.js scanner
+        run: node scan.js .
+
+      - name: Test Bash scanner
+        run: ./scan.sh .
+
+  lint:
+    name: Lint Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint Bash script
+        run: shellcheck scan.sh || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Check Node.js syntax
+        run: node --check scan.js
