@@ -30,18 +30,17 @@ SEVERITY="CRITICAL"
 VULNERABLE_REACT_VERSIONS=("19.0.0" "19.1.0" "19.1.1" "19.2.0")
 PATCHED_REACT_VERSION="19.2.1"
 
-# Next.js vulnerable ranges (simplified for bash)
-declare -A NEXTJS_VULNERABLE=(
-    ["15.0"]="15.0.0-15.0.4"
-    ["15.1"]="15.1.0-15.1.8"
-    ["15.2"]="15.2.0-15.2.5"
-    ["15.3"]="15.3.0-15.3.5"
-    ["15.4"]="15.4.0-15.4.7"
-    ["15.5"]="15.5.0-15.5.6"
-    ["16.0"]="16.0.0-16.0.6"
+# Next.js vulnerable version ranges (min-max pairs)
+NEXTJS_VULN_RANGES=(
+    "14.3.0-canary.0:14.3.0-canary.87"
+    "15.0.0:15.0.4"
+    "15.1.0:15.1.8"
+    "15.2.0:15.2.5"
+    "15.3.0:15.3.5"
+    "15.4.0:15.4.7"
+    "15.5.0:15.5.6"
+    "16.0.0:16.0.6"
 )
-
-NEXTJS_PATCHED_VERSIONS=("15.0.5" "15.1.9" "15.2.6" "15.3.6" "15.4.8" "15.5.7" "16.0.7")
 
 # Global counters
 TOTAL_PROJECTS=0
@@ -52,8 +51,9 @@ JSON_OUTPUT=false
 VERBOSE=false
 CI_MODE=false
 
-# Results array
+# Results arrays
 declare -a RESULTS=()
+declare -a WARNINGS=()
 
 ###############################################################################
 # Helper Functions
@@ -154,20 +154,14 @@ is_nextjs_vulnerable() {
     local version=$1
     version=$(echo "$version" | sed 's/^[\^~>=<]*//')
 
-    # Extract major.minor
-    local major_minor=$(echo "$version" | grep -oE '^[0-9]+\.[0-9]+')
+    # Check against each vulnerable range
+    for range in "${NEXTJS_VULN_RANGES[@]}"; do
+        local min_ver=$(echo "$range" | cut -d':' -f1)
+        local max_ver=$(echo "$range" | cut -d':' -f2)
 
-    # Check known vulnerable ranges
-    for range in "${!NEXTJS_VULNERABLE[@]}"; do
-        if [[ "$major_minor" == "$range" ]]; then
-            local range_spec="${NEXTJS_VULNERABLE[$range]}"
-            local min_ver=$(echo "$range_spec" | cut -d'-' -f1)
-            local max_ver=$(echo "$range_spec" | cut -d'-' -f2)
-
-            if [[ $(version_compare "$version" "$min_ver") -ge 0 ]] && \
-               [[ $(version_compare "$version" "$max_ver") -le 0 ]]; then
-                return 0
-            fi
+        if [[ $(version_compare "$version" "$min_ver") -ge 0 ]] && \
+           [[ $(version_compare "$version" "$max_ver") -le 0 ]]; then
+            return 0
         fi
     done
 
@@ -206,6 +200,28 @@ get_nextjs_fix_version() {
     esac
 }
 
+# Get React major version
+get_react_major_version() {
+    local version=$1
+    version=$(echo "$version" | sed 's/^[\^~>=<]*//')
+    echo "$version" | grep -oE '^[0-9]+' | head -1
+}
+
+# Check if project uses static export
+is_static_export() {
+    local project_path=$1
+
+    for config_file in "next.config.js" "next.config.mjs" "next.config.ts"; do
+        local config_path="$project_path/$config_file"
+        if [[ -f "$config_path" ]]; then
+            if grep -q "output: ['\"]export['\"]" "$config_path"; then
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
 ###############################################################################
 # Scanning Functions
 ###############################################################################
@@ -222,10 +238,20 @@ scan_project() {
 
     local vulnerable=false
     local vulnerable_packages=()
+    local warnings=()
     local package_manager=$(detect_package_manager "$project_path")
 
-    # Check React versions
+    # Get React version and major version
     local react_version=$(jq -r '.dependencies.react // .devDependencies.react // "null"' "$package_json")
+    local react_major=$(get_react_major_version "$react_version")
+
+    # Check if static export
+    local is_static=false
+    if is_static_export "$project_path"; then
+        is_static=true
+    fi
+
+    # Check React versions
     if [[ "$react_version" != "null" ]] && is_react_vulnerable "$react_version"; then
         vulnerable=true
         vulnerable_packages+=("react:$react_version:$PATCHED_REACT_VERSION")
@@ -240,12 +266,20 @@ scan_project() {
         fi
     done
 
-    # Check Next.js
+    # Check Next.js - only vulnerable if React 19 is present
     local next_version=$(jq -r '.dependencies.next // .devDependencies.next // "null"' "$package_json")
     if [[ "$next_version" != "null" ]] && is_nextjs_vulnerable "$next_version"; then
-        vulnerable=true
-        local fix_version=$(get_nextjs_fix_version "$next_version")
-        vulnerable_packages+=("next:$next_version:$fix_version")
+        # Next.js is in vulnerable range, but check React version
+        if [[ "$react_major" != "19" ]]; then
+            warnings+=("Next.js $next_version is in vulnerable range, but using React $react_major (safe - only React 19 affected)")
+        elif [[ "$is_static" == true ]]; then
+            warnings+=("Next.js $next_version with React 19 detected, but using static export (likely safe - no Server Components)")
+        else
+            # Both React 19 and Server Components likely present
+            vulnerable=true
+            local fix_version=$(get_nextjs_fix_version "$next_version")
+            vulnerable_packages+=("next:$next_version:$fix_version")
+        fi
     fi
 
     # Store results
@@ -277,6 +311,15 @@ scan_project() {
         result+="],\"packageManager\":\"$package_manager\",\"fixCommand\":\"$fix_cmd\"}"
 
         RESULTS+=("$result")
+    fi
+
+    # Store warnings for projects with notes
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+        local warning_entry="$project_path"
+        for warning in "${warnings[@]}"; do
+            warning_entry+="|$warning"
+        done
+        WARNINGS+=("$warning_entry")
     fi
 }
 
@@ -358,6 +401,28 @@ print_vulnerable_projects() {
         echo -e "\n   ${YELLOW}Fix command:${RESET}"
         echo -e "   ${DIM}\$${RESET} cd $path"
         echo -e "   ${DIM}\$${RESET} $fix_cmd"
+        echo ""
+
+        ((idx++))
+    done
+}
+
+print_warnings() {
+    if [[ ${#WARNINGS[@]} -eq 0 ]]; then
+        return
+    fi
+
+    echo -e "${YELLOW}${BOLD}ℹ Projects with analysis notes:${RESET}\n"
+
+    local idx=1
+    for warning_entry in "${WARNINGS[@]}"; do
+        IFS='|' read -ra PARTS <<< "$warning_entry"
+        local path="${PARTS[0]}"
+        echo -e "${DIM}$idx. $path${RESET}"
+
+        for ((i=1; i<${#PARTS[@]}; i++)); do
+            echo -e "   ${YELLOW}ℹ${RESET} ${PARTS[$i]}"
+        done
         echo ""
 
         ((idx++))
@@ -459,6 +524,7 @@ main() {
         print_header
         print_summary
         print_vulnerable_projects
+        print_warnings
         print_footer
     fi
 
