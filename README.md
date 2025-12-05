@@ -1,21 +1,50 @@
-# CVE-2025-55182 Scanner (React2Shell)
+# React2Shell Scanner
 
-A community tool to detect and remediate the critical React Server Components RCE vulnerability.
+🛡️ **Detect CVE-2025-55182: Critical RCE in React Server Components**
+
+A comprehensive security scanner to identify vulnerable React 19.x and Next.js applications affected by the React2Shell (CVE-2025-55182) remote code execution vulnerability.
 
 [![CVSS Score](https://img.shields.io/badge/CVSS-10.0%20CRITICAL-red)](https://nvd.nist.gov/vuln/detail/CVE-2025-55182)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Overview
+## 🚨 About React2Shell (CVE-2025-55182)
 
-**CVE-2025-55182** (also known as "React2Shell") is a critical unauthenticated remote code execution vulnerability in React Server Components (RSC). With a CVSS score of 10.0, this vulnerability allows attackers to execute arbitrary code on servers through specially crafted HTTP requests.
+React2Shell is a **maximum severity (10.0 CVSS)** vulnerability in React Server Components that allows unauthenticated remote code execution. Attackers can exploit this through specially crafted HTTP requests to Server Function endpoints.
 
-This tool helps you:
-- Scan your projects for vulnerable versions of React and Next.js
-- Identify affected packages and their versions
-- Generate fix commands for easy remediation
-- Integrate vulnerability scanning into CI/CD pipelines
+**Key Facts:**
+- **Affected:** React 19.x and Next.js 15.x/16.x (with React 19)
+- **Attack Vector:** Network (no authentication required)
+- **Impact:** Complete server compromise (RCE)
+- **Disclosure:** December 3, 2025
+- **Exploitation:** Near 100% success rate in default configurations
 
-## Vulnerability Details
+**⚠️ Critical Note:** Only React 19.x is vulnerable. React 18.x and earlier are NOT affected.
+
+## 📋 What This Scanner Checks
+
+This tool performs intelligent vulnerability detection:
+
+### 1. **React Version Analysis** 🔴 Critical
+- Detects vulnerable React 19.0.0, 19.1.0, 19.1.1, 19.2.0
+- Confirms React 18.x apps are safe (prevents false positives)
+- Identifies react-server-dom-* packages
+
+### 2. **Next.js Configuration Check** 🟡 Warning
+- Scans Next.js 14.3.x-canary, 15.x, 16.x versions
+- Validates React 19 dependency (required for vulnerability)
+- Detects static export mode (Server Components disabled = safe)
+
+### 3. **Smart False Positive Prevention** ✅ Accuracy
+- Only flags apps with React 19 + Server Components
+- Provides context for edge cases
+- Explains why projects are/aren't vulnerable
+
+### 4. **Multi-Project Scanning** 📁 Scale
+- Recursive directory scanning
+- Detects npm, yarn, and pnpm projects
+- Generates project-specific fix commands
+
+## 🎯 Scanner Features
 
 | Property | Value |
 |----------|-------|
@@ -56,16 +85,19 @@ This tool helps you:
 - `15.0.5+`, `15.1.9+`, `15.2.6+`, `15.3.6+`, `15.4.8+`, `15.5.7+`
 - `16.0.7+`
 
-## Installation
+## 🚀 Getting Started
 
 ### Prerequisites
 
-**For Bash script:**
-- bash 4.0+
+**Node.js Scanner (Recommended):**
+- Node.js 12+ (cross-platform, no dependencies)
+
+**Bash Scanner:**
+- Bash 3.2+ (macOS/Linux)
 - jq (JSON processor)
 
 ```bash
-# Install jq
+# Install jq (if using Bash scanner)
 # macOS
 brew install jq
 
@@ -76,51 +108,66 @@ sudo apt-get install jq
 sudo yum install jq
 ```
 
-**For Node.js script:**
-- Node.js 12+
+### Step 1: Get the Scanner
 
-### Download
+**Option A: Clone (Recommended for users)**
 
 ```bash
 # Clone the repository
-git clone https://github.com/nxgn-kd01/cve-2025-55182-scanner.git
-cd cve-2025-55182-scanner
+git clone https://github.com/nxgn-kd01/react2shell-scanner.git
+cd react2shell-scanner
 
 # Make scripts executable
 chmod +x scan.sh scan.js
 ```
 
-Or download individual scripts:
-```bash
-# Bash version
-curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.sh
-chmod +x scan.sh
+**Option B: Fork (Recommended for contributors)**
 
-# Node.js version
-curl -O https://raw.githubusercontent.com/nxgn-kd01/cve-2025-55182-scanner/main/scan.js
-chmod +x scan.js
+```bash
+# Fork on GitHub (click "Fork" button on repository page)
+# Then clone your fork
+git clone https://github.com/YOUR_USERNAME/react2shell-scanner.git
+cd react2shell-scanner
+
+# Make scripts executable
+chmod +x scan.sh scan.js
+
+# Add upstream remote to stay updated
+git remote add upstream https://github.com/nxgn-kd01/react2shell-scanner.git
 ```
 
-## Usage
+**Option C: Direct Download**
 
-### Basic Scanning
-
-**Scan current directory:**
 ```bash
-# Using Node.js
+# Node.js version (recommended - cross-platform)
+curl -O https://raw.githubusercontent.com/nxgn-kd01/react2shell-scanner/main/scan.js
+chmod +x scan.js
+
+# Bash version (Unix/Linux/macOS only)
+curl -O https://raw.githubusercontent.com/nxgn-kd01/react2shell-scanner/main/scan.sh
+chmod +x scan.sh
+```
+
+## 💻 Usage
+
+### Step 2: Run the Scanner
+
+**🔍 Scan current directory:**
+```bash
+# Using Node.js (recommended)
 node scan.js
 
 # Using Bash
 ./scan.sh
 ```
 
-**Scan specific project:**
+**📁 Scan specific project:**
 ```bash
 node scan.js /path/to/project
 ./scan.sh /path/to/project
 ```
 
-**Recursive scan (all subdirectories):**
+**🗂️ Recursive scan (all subdirectories):**
 ```bash
 node scan.js -r
 ./scan.sh -r
@@ -350,7 +397,7 @@ npm run build
 node scan.js --ci
 ```
 
-## Frequently Asked Questions
+## ❓ Frequently Asked Questions
 
 ### Q: Does this scan transitive dependencies?
 
@@ -358,27 +405,31 @@ A: Currently, the scanner checks direct dependencies in `package.json`. For deep
 
 ### Q: I'm on React 18, am I affected?
 
-A: **No, React 18 is NOT affected** by CVE-2025-55182. This vulnerability only affects React 19.x Server Components.
+A: **No, React 18 is NOT affected** ✅
 
-The scanner will correctly identify React 18 apps as safe, even if using Next.js 15.x or 16.x versions that are in the vulnerable range. The key requirement is that React 19 must be present for the vulnerability to exist.
+CVE-2025-55182 only affects React 19.x Server Components. The scanner will correctly identify React 18 apps as safe, even if using Next.js 15.x or 16.x versions that are in the vulnerable range.
 
 ### Q: Can I use this in my automated build pipeline?
 
-A: Yes! Use the `--ci` flag to make the scanner exit with code 1 if vulnerabilities are found, which will fail your pipeline.
+A: **Yes!** Use the `--ci` flag to make the scanner exit with code 1 if vulnerabilities are found, which will fail your pipeline. See CI/CD integration examples above.
 
 ### Q: What if I can't upgrade immediately?
 
-A: If you cannot upgrade immediately:
-1. Disable Server Components in your application
-2. Add WAF rules to block suspicious RSC payloads
-3. Monitor your logs for exploitation attempts
-4. Plan an emergency upgrade window
+A: **Temporary mitigations** (upgrading is the only definitive fix):
+1. ⛔ Disable Server Components in your application
+2. 🛡️ Add WAF rules to block suspicious RSC payloads
+3. 📊 Monitor logs for exploitation attempts
+4. ⏰ Plan an emergency upgrade window
 
-**Note:** Upgrading is the only definitive mitigation.
+**⚠️ Critical:** These are temporary measures only. Upgrade to patched versions ASAP.
 
 ### Q: How accurate is this scanner?
 
-A: The scanner checks exact version matches against the official CVE advisory. False positives are unlikely, but always verify with your package manager's lock files.
+A: **Very accurate** with intelligent false positive prevention:
+- ✅ Checks exact version matches against official CVE advisory
+- ✅ Validates React 19 dependency (prevents React 18 false positives)
+- ✅ Detects static export configuration
+- ✅ Provides contextual warnings for edge cases
 
 ## Contributing
 
