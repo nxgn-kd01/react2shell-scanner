@@ -253,11 +253,18 @@ scan_project() {
 
     # Check React versions
     if [[ "$react_version" != "null" ]] && is_react_vulnerable "$react_version"; then
-        vulnerable=true
-        vulnerable_packages+=("react:$react_version:$PATCHED_REACT_VERSION")
+        # React 19.x is only vulnerable if Server Components are enabled
+        if [[ "$is_static" == true ]]; then
+            # React 19 with static export - not vulnerable but should upgrade
+            warnings+=("React $react_version detected with static export (safe - no Server Components)")
+        else
+            # React 19 without static export - vulnerable
+            vulnerable=true
+            vulnerable_packages+=("react:$react_version:$PATCHED_REACT_VERSION")
+        fi
     fi
 
-    # Check react-server-dom packages
+    # Check react-server-dom packages (always vulnerable - these ARE Server Components)
     for pkg in "react-server-dom-webpack" "react-server-dom-parcel" "react-server-dom-turbopack"; do
         local pkg_version=$(jq -r ".dependencies.\"$pkg\" // .devDependencies.\"$pkg\" // \"null\"" "$package_json")
         if [[ "$pkg_version" != "null" ]] && is_react_vulnerable "$pkg_version"; then

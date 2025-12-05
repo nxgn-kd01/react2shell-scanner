@@ -250,13 +250,20 @@ function scanProject(projectPath) {
           });
         }
       } else if (isVersionVulnerable(pkgName, version)) {
-        // For React and react-server-dom-* packages, directly flag
-        result.vulnerable = true;
-        result.packages.push({
-          name: pkgName,
-          version: version,
-          fixVersion: getFixVersion(pkgName)
-        });
+        // For React and react-server-dom-* packages
+        // React 19.x is only vulnerable if Server Components are enabled
+        if (pkgName === 'react' && isStatic) {
+          // React 19 with static export - not vulnerable but should upgrade
+          result.warnings.push(`React ${version} detected with static export (safe - no Server Components)`);
+        } else {
+          // React 19 without static export OR react-server-dom-* packages
+          result.vulnerable = true;
+          result.packages.push({
+            name: pkgName,
+            version: version,
+            fixVersion: getFixVersion(pkgName)
+          });
+        }
       }
     });
 
