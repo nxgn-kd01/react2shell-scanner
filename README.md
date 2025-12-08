@@ -1,11 +1,14 @@
-# React2Shell Scanner
+# 🚨 React2Shell Scanner
 
-🛡️ **Detect CVE-2025-55182: Critical RCE in React Server Components**
+**CVSS 10.0 RCE in React Server Components. Is your React 19 app vulnerable?**
 
-A comprehensive security scanner to identify vulnerable React 19.x and Next.js applications affected by the React2Shell (CVE-2025-55182) remote code execution vulnerability.
+Fast, accurate scanner for CVE-2025-55182 (React2Shell) - a critical remote code execution vulnerability exploited in the wild. Zero false positives with intelligent Server Components detection.
 
 [![CVSS Score](https://img.shields.io/badge/CVSS-10.0%20CRITICAL-red)](https://nvd.nist.gov/vuln/detail/CVE-2025-55182)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Issues](https://img.shields.io/github/issues/nxgn-kd01/react2shell-scanner)](https://github.com/nxgn-kd01/react2shell-scanner/issues)
+[![GitHub Stars](https://img.shields.io/github/stars/nxgn-kd01/react2shell-scanner?style=social)](https://github.com/nxgn-kd01/react2shell-scanner/stargazers)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/nxgn-kd01/react2shell-scanner/blob/main/CONTRIBUTING.md)
 
 ## 🚨 About React2Shell (CVE-2025-55182)
 
@@ -19,6 +22,24 @@ React2Shell is a **maximum severity (10.0 CVSS)** vulnerability in React Server 
 - **Exploitation:** Near 100% success rate in default configurations
 
 **⚠️ Critical Note:** Only React 19.x is vulnerable. React 18.x and earlier are NOT affected.
+
+## ⚡ Quick Start (30 seconds)
+
+```bash
+# Option A: Node.js scanner (recommended - cross-platform, no dependencies)
+npx react2shell-scanner /path/to/your/project
+
+# Option B: Direct download and run
+curl -sSL https://raw.githubusercontent.com/nxgn-kd01/react2shell-scanner/main/scan.js > scan.js
+node scan.js /path/to/your/project
+
+# Option C: Clone and run
+git clone https://github.com/nxgn-kd01/react2shell-scanner.git
+cd react2shell-scanner
+node scan.js /path/to/your/project
+```
+
+**Results in seconds:** 🚨 Vulnerable | ⚠️ Warnings | ✅ Safe
 
 ## 📋 What This Scanner Checks
 
