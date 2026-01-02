@@ -280,6 +280,38 @@ is_static_export() {
     return 1
 }
 
+# Check if project has Server Functions ('use server' directive)
+# Returns 0 if found, 1 if not found
+# Sets SERVER_FUNCTION_FILES array with matching files
+SERVER_FUNCTION_FILES=()
+has_server_functions() {
+    local project_path=$1
+    SERVER_FUNCTION_FILES=()
+
+    # Find JS/TS files (excluding node_modules and build dirs) and search for 'use server'
+    local found_files
+    found_files=$(find "$project_path" \
+        -maxdepth 6 \
+        -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) \
+        -not -path "*/node_modules/*" \
+        -not -path "*/.next/*" \
+        -not -path "*/.git/*" \
+        -not -path "*/dist/*" \
+        -not -path "*/build/*" \
+        -not -path "*/.turbo/*" \
+        -exec grep -l "'use server'\|\"use server\"" {} \; 2>/dev/null | head -5)
+
+    if [[ -n "$found_files" ]]; then
+        while IFS= read -r file; do
+            # Store relative path
+            local rel_path="${file#$project_path/}"
+            SERVER_FUNCTION_FILES+=("$rel_path")
+        done <<< "$found_files"
+        return 0
+    fi
+    return 1
+}
+
 ###############################################################################
 # Scanning Functions
 ###############################################################################
@@ -309,25 +341,39 @@ scan_project() {
         is_static=true
     fi
 
+    # Check for 'use server' directives
+    local has_server_funcs=false
+    if has_server_functions "$project_path"; then
+        has_server_funcs=true
+    fi
+
     # Check React versions
     if [[ "$react_version" != "null" ]] && is_react_vulnerable "$react_version"; then
         # React 19.x is only vulnerable if Server Components are enabled
         if [[ "$is_static" == true ]]; then
             # React 19 with static export - not vulnerable but should upgrade
             warnings+=("React $react_version detected with static export (safe - no Server Components)")
+        elif [[ "$has_server_funcs" == false ]]; then
+            # No 'use server' directives found
+            warnings+=("React $react_version detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.")
         else
-            # React 19 without static export - vulnerable
+            # React 19 with Server Functions - vulnerable
             vulnerable=true
             vulnerable_packages+=("react:$react_version:$PATCHED_REACT_VERSION")
         fi
     fi
 
-    # Check react-server-dom packages (always vulnerable - these ARE Server Components)
+    # Check react-server-dom packages
     for pkg in "react-server-dom-webpack" "react-server-dom-parcel" "react-server-dom-turbopack"; do
         local pkg_version=$(jq -r ".dependencies.\"$pkg\" // .devDependencies.\"$pkg\" // \"null\"" "$package_json")
         if [[ "$pkg_version" != "null" ]] && is_react_vulnerable "$pkg_version"; then
-            vulnerable=true
-            vulnerable_packages+=("$pkg:$pkg_version:$PATCHED_REACT_VERSION")
+            if [[ "$has_server_funcs" == false ]]; then
+                # No 'use server' directives found
+                warnings+=("$pkg $pkg_version detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.")
+            else
+                vulnerable=true
+                vulnerable_packages+=("$pkg:$pkg_version:$PATCHED_REACT_VERSION")
+            fi
         fi
     done
 
@@ -339,8 +385,11 @@ scan_project() {
             warnings+=("Next.js $next_version is in vulnerable range, but using React $react_major (safe - only React 19 affected)")
         elif [[ "$is_static" == true ]]; then
             warnings+=("Next.js $next_version with React 19 detected, but using static export (likely safe - no Server Components)")
+        elif [[ "$has_server_funcs" == false ]]; then
+            # No 'use server' directives found
+            warnings+=("Next.js $next_version with React 19 detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.")
         else
-            # Both React 19 and Server Components likely present
+            # Both React 19 and Server Functions present - VULNERABLE
             vulnerable=true
             local fix_version=$(get_nextjs_fix_version "$next_version")
             vulnerable_packages+=("next:$next_version:$fix_version")
@@ -352,7 +401,11 @@ scan_project() {
     if [[ "$expo_version" != "null" ]] && is_expo_vulnerable "$expo_version"; then
         if [[ "$react_major" != "19" ]]; then
             warnings+=("expo $expo_version is in vulnerable range, but using React $react_major (safe - only React 19 affected)")
+        elif [[ "$has_server_funcs" == false ]]; then
+            # No 'use server' directives found
+            warnings+=("expo $expo_version with React 19 detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.")
         else
+            # Both React 19 and Server Functions present - VULNERABLE
             vulnerable=true
             vulnerable_packages+=("expo:$expo_version:$PATCHED_EXPO_VERSION")
         fi

@@ -194,6 +194,50 @@ function isStaticExport(projectPath) {
 }
 
 /**
+ * Check if project uses Server Functions ('use server' directive)
+ * Returns: { found: boolean, files: string[] }
+ */
+function hasServerFunctions(projectPath) {
+  const result = { found: false, files: [] };
+  const extensions = ['.js', '.jsx', '.ts', '.tsx'];
+  const dirsToSkip = ['node_modules', '.next', '.git', 'dist', 'build', '.turbo'];
+
+  function scanDir(dir, depth = 0) {
+    if (depth > 5) return; // Limit recursion depth
+
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          if (!dirsToSkip.includes(entry.name) && !entry.name.startsWith('.')) {
+            scanDir(fullPath, depth + 1);
+          }
+        } else if (entry.isFile() && extensions.some(ext => entry.name.endsWith(ext))) {
+          try {
+            const content = fs.readFileSync(fullPath, 'utf8');
+            // Check for 'use server' directive (file-level or function-level)
+            if (content.includes("'use server'") || content.includes('"use server"')) {
+              result.found = true;
+              result.files.push(fullPath.replace(projectPath + '/', ''));
+            }
+          } catch (e) {
+            // Skip files we can't read
+          }
+        }
+      }
+    } catch (e) {
+      // Skip directories we can't read
+    }
+  }
+
+  scanDir(projectPath);
+  return result;
+}
+
+/**
  * Get React major version
  */
 function getReactMajorVersion(version) {
@@ -237,6 +281,9 @@ function scanProject(projectPath) {
     // Check if static export
     const isStatic = isStaticExport(projectPath);
 
+    // Check for 'use server' directives
+    const serverFunctions = hasServerFunctions(projectPath);
+
     // Determine package manager
     if (fs.existsSync(path.join(projectPath, 'yarn.lock'))) {
       result.packageManager = 'yarn';
@@ -271,13 +318,23 @@ function scanProject(projectPath) {
             return; // Likely not vulnerable - static export doesn't use Server Components
           }
 
-          // Both React 19 and Server Components likely present
+          // Check for 'use server' directives
+          if (!serverFunctions.found) {
+            result.warnings.push(`${pkgName} ${version} with React 19 detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.`);
+            return; // Likely not vulnerable - no Server Functions detected
+          }
+
+          // Both React 19 and Server Functions present - VULNERABLE
           result.vulnerable = true;
           result.packages.push({
             name: pkgName,
             version: version,
             fixVersion: getFixVersion(pkgName)
           });
+          // Add info about which files have server functions
+          if (serverFunctions.files.length > 0) {
+            result.serverFunctionFiles = serverFunctions.files.slice(0, 5); // Limit to first 5
+          }
         }
       } else if (directRscPackages.includes(pkgName)) {
         // Direct RSC frameworks - always vulnerable if in version range
@@ -295,14 +352,21 @@ function scanProject(projectPath) {
         if (pkgName === 'react' && isStatic) {
           // React 19 with static export - not vulnerable but should upgrade
           result.warnings.push(`React ${version} detected with static export (safe - no Server Components)`);
+        } else if (!serverFunctions.found) {
+          // No 'use server' directives found
+          result.warnings.push(`${pkgName} ${version} detected, but no 'use server' directives found (likely safe). Note: dynamically imported Server Functions require manual review.`);
         } else {
-          // React 19 without static export OR react-server-dom-* packages
+          // React 19 with Server Functions - VULNERABLE
           result.vulnerable = true;
           result.packages.push({
             name: pkgName,
             version: version,
             fixVersion: getFixVersion(pkgName)
           });
+          // Add info about which files have server functions
+          if (serverFunctions.files.length > 0 && !result.serverFunctionFiles) {
+            result.serverFunctionFiles = serverFunctions.files.slice(0, 5);
+          }
         }
       }
     });
@@ -404,6 +468,14 @@ function formatOutput(results) {
       result.packages.forEach(pkg => {
         output += `   └─ ${COLORS.bold}${pkg.name}${COLORS.reset} ${pkg.version} ${COLORS.red}→${COLORS.reset} ${COLORS.green}${pkg.fixVersion}${COLORS.reset}\n`;
       });
+
+      // Show files with 'use server' directives
+      if (result.serverFunctionFiles && result.serverFunctionFiles.length > 0) {
+        output += `\n   ${COLORS.cyan}Server Functions found in:${COLORS.reset}\n`;
+        result.serverFunctionFiles.forEach(file => {
+          output += `   ${COLORS.dim}•${COLORS.reset} ${file}\n`;
+        });
+      }
 
       output += `\n   ${COLORS.yellow}Fix command:${COLORS.reset}\n`;
       result.fixCommands.forEach(cmd => {

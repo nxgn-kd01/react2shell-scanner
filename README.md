@@ -57,12 +57,18 @@ This tool performs intelligent vulnerability detection:
 - Validates React 19 dependency where required
 - Detects static export mode (Server Components disabled = safe)
 
-### 3. **Smart False Positive Prevention** ✅ Accuracy
-- Only flags apps with React 19 + Server Components
+### 3. **Server Function Detection** 🔍 Deep Analysis
+- Scans source files for `'use server'` directives
+- Identifies files containing Server Functions
+- Only flags projects that actually use Server Components
+- **Note:** Dynamically imported Server Functions require manual review
+
+### 4. **Smart False Positive Prevention** ✅ Accuracy
+- Only flags apps with React 19 + Server Components + 'use server' directives
 - Provides context for edge cases
 - Explains why projects are/aren't vulnerable
 
-### 4. **Multi-Project Scanning** 📁 Scale
+### 5. **Multi-Project Scanning** 📁 Scale
 - Recursive directory scanning
 - Detects npm, yarn, and pnpm projects
 - Generates project-specific fix commands
@@ -371,12 +377,14 @@ The scanner performs the following checks:
    - React 19.0.0, 19.1.0, 19.1.1, 19.2.0
    - React Server DOM packages (same versions)
    - Next.js version ranges (14.3.x, 15.x, 16.x)
-4. **Validates actual vulnerability** by checking:
+4. **Scans for Server Functions** by looking for `'use server'` directives in source files
+5. **Validates actual vulnerability** by checking:
    - React version (only React 19 is affected - React 18 is safe)
    - Configuration (static exports don't use Server Components)
-5. **Detects package manager** (npm, yarn, or pnpm)
-6. **Generates fix commands** with appropriate upgrade syntax
-7. **Reports findings** in human-readable or JSON format
+   - Presence of `'use server'` directives (indicates Server Functions in use)
+6. **Detects package manager** (npm, yarn, or pnpm)
+7. **Generates fix commands** with appropriate upgrade syntax
+8. **Reports findings** in human-readable or JSON format
 
 ### Accuracy Features
 
@@ -384,8 +392,9 @@ The scanner includes intelligent detection to prevent false positives:
 
 - **React Version Check**: Next.js apps are only flagged if React 19 is present (React 18 is safe)
 - **Static Export Detection**: Projects using `output: 'export'` are marked as likely safe
+- **Server Function Detection**: Scans source files for `'use server'` directives to confirm actual Server Component usage
 - **Contextual Warnings**: Provides explanations for why projects are or aren't vulnerable
-- **Conservative Approach**: Warns about edge cases that may need manual review
+- **Conservative Approach**: Warns about edge cases that may need manual review (e.g., dynamically imported Server Functions)
 
 **Example Output:**
 ```
@@ -395,6 +404,10 @@ The scanner includes intelligent detection to prevent false positives:
 
 1. /path/to/project
    ℹ Next.js ^15.1.3 is in vulnerable range, but using React 18 (safe - only React 19 affected)
+
+2. /path/to/another-project
+   ℹ Next.js 16.0.5 with React 19 detected, but no 'use server' directives found (likely safe).
+     Note: dynamically imported Server Functions require manual review.
 ```
 
 ## Remediation
@@ -469,7 +482,12 @@ A: **Very accurate** with intelligent false positive prevention:
 - ✅ Checks exact version matches against official CVE advisory
 - ✅ Validates React 19 dependency (prevents React 18 false positives)
 - ✅ Detects static export configuration
+- ✅ Scans for `'use server'` directives to confirm actual vulnerability
 - ✅ Provides contextual warnings for edge cases
+
+### Q: What about dynamically imported Server Functions?
+
+A: The scanner detects `'use server'` directives in your source files. However, **dynamically imported Server Functions** (loaded at runtime via `import()`) may not be detected statically. If the scanner reports "no 'use server' directives found" but you use dynamic imports for Server Functions, you should manually review those files. The scanner will include a note reminding you of this.
 
 ## Contributing
 
