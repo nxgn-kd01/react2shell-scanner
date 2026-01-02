@@ -19,6 +19,13 @@ const VULNERABILITY = {
   severity: 'CRITICAL',
   description: 'Unauthenticated Remote Code Execution in React Server Components',
 
+  // Related CVEs patched in same release
+  relatedCVEs: [
+    'CVE-2025-55184', // DoS (CVSS 7.5)
+    'CVE-2025-55183', // Source Code Exposure (CVSS 5.3)
+    'CVE-2025-67779'  // Additional case
+  ],
+
   vulnerable: {
     react: ['19.0.0', '19.1.0', '19.1.1', '19.2.0'],
     'react-server-dom-webpack': ['19.0.0', '19.1.0', '19.1.1', '19.2.0'],
@@ -26,14 +33,26 @@ const VULNERABILITY = {
     'react-server-dom-turbopack': ['19.0.0', '19.1.0', '19.1.1', '19.2.0'],
     'next': {
       ranges: [
+        { min: '14.0.0', max: '14.2.34' },
         { min: '14.3.0-canary.0', max: '14.3.0-canary.87' },
-        { min: '15.0.0', max: '15.0.4' },
+        { min: '15.0.0', max: '15.0.6' },
         { min: '15.1.0', max: '15.1.8' },
         { min: '15.2.0', max: '15.2.5' },
         { min: '15.3.0', max: '15.3.5' },
         { min: '15.4.0', max: '15.4.7' },
         { min: '15.5.0', max: '15.5.6' },
-        { min: '16.0.0', max: '16.0.6' }
+        { min: '16.0.0', max: '16.0.9' }
+      ]
+    },
+    // Additional affected frameworks (per React official advisory)
+    'react-router': ['7.0.0', '7.0.1', '7.0.2', '7.1.0', '7.1.1', '7.1.2', '7.1.3'],
+    'waku': ['0.21.0', '0.21.1', '0.21.2', '0.21.3', '0.21.4', '0.21.5'],
+    '@parcel/rsc': ['2.12.0', '2.13.0', '2.13.1', '2.13.2'],
+    '@vitejs/plugin-rsc': ['0.1.0', '0.1.1', '0.1.2', '0.2.0'],
+    'rwsdk': ['0.1.0', '0.2.0', '0.3.0', '0.4.0'],
+    'expo': {
+      ranges: [
+        { min: '52.0.0', max: '52.0.9' }
       ]
     }
   },
@@ -43,7 +62,13 @@ const VULNERABILITY = {
     'react-server-dom-webpack': '19.2.1',
     'react-server-dom-parcel': '19.2.1',
     'react-server-dom-turbopack': '19.2.1',
-    'next': ['14.3.0-canary.88', '15.0.5', '15.1.9', '15.2.6', '15.3.6', '15.4.8', '15.5.7', '16.0.7']
+    'next': ['14.2.35', '14.3.0-canary.88', '15.0.7', '15.1.9', '15.2.6', '15.3.6', '15.4.8', '15.5.7', '16.0.10'],
+    'react-router': '7.1.4',
+    'waku': '0.21.6',
+    '@parcel/rsc': '2.13.3',
+    '@vitejs/plugin-rsc': '0.2.1',
+    'rwsdk': '0.4.1',
+    'expo': '52.0.10'
   }
 };
 
@@ -150,7 +175,7 @@ function getFixVersion(packageName) {
  * Check if project uses static export
  */
 function isStaticExport(projectPath) {
-  const configFiles = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
+  const configFiles = ['next.config.js', 'next.config.mjs', 'next.config.ts', 'next.config.cjs'];
 
   for (const configFile of configFiles) {
     const configPath = path.join(projectPath, configFile);
@@ -221,27 +246,42 @@ function scanProject(projectPath) {
       result.packageManager = 'npm';
     }
 
+    // Packages that require React 19 to be vulnerable
+    const react19RequiredPackages = ['next', 'expo'];
+    // Packages that directly include RSC (always vulnerable if in range)
+    const directRscPackages = ['react-router', 'waku', '@parcel/rsc', '@vitejs/plugin-rsc', 'rwsdk'];
+
     // Check each package
     Object.keys(VULNERABILITY.vulnerable).forEach(pkgName => {
       const version = allDeps[pkgName];
       if (!version) return;
 
-      // Special handling for Next.js - only vulnerable if React 19 is present
-      if (pkgName === 'next') {
+      // Special handling for Next.js and Expo - only vulnerable if React 19 is present
+      if (react19RequiredPackages.includes(pkgName)) {
         if (isVersionVulnerable(pkgName, version)) {
-          // Next.js version is in vulnerable range, but check React version
+          // Version is in vulnerable range, but check React version
           if (reactMajor !== 19) {
-            result.warnings.push(`Next.js ${version} is in vulnerable range, but using React ${reactMajor || 'unknown'} (safe - only React 19 affected)`);
+            result.warnings.push(`${pkgName} ${version} is in vulnerable range, but using React ${reactMajor || 'unknown'} (safe - only React 19 affected)`);
             return; // Not vulnerable - React 19 not present
           }
 
-          // Check if static export
-          if (isStatic) {
+          // Check if static export (Next.js only)
+          if (pkgName === 'next' && isStatic) {
             result.warnings.push(`Next.js ${version} with React 19 detected, but using static export (likely safe - no Server Components)`);
             return; // Likely not vulnerable - static export doesn't use Server Components
           }
 
           // Both React 19 and Server Components likely present
+          result.vulnerable = true;
+          result.packages.push({
+            name: pkgName,
+            version: version,
+            fixVersion: getFixVersion(pkgName)
+          });
+        }
+      } else if (directRscPackages.includes(pkgName)) {
+        // Direct RSC frameworks - always vulnerable if in version range
+        if (isVersionVulnerable(pkgName, version)) {
           result.vulnerable = true;
           result.packages.push({
             name: pkgName,
@@ -390,9 +430,11 @@ function formatOutput(results) {
 
   // Footer with references
   output += `${COLORS.dim}─────────────────────────────────────────────────────────────${COLORS.reset}\n`;
+  output += `${COLORS.dim}Related CVEs:${COLORS.reset} CVE-2025-55184 (DoS), CVE-2025-55183 (Source Exposure)\n`;
+  output += `${COLORS.dim}Affected:${COLORS.reset} React, Next.js, react-router, waku, @parcel/rsc, expo\n\n`;
   output += `${COLORS.dim}References:${COLORS.reset}\n`;
+  output += `  • https://react.dev/blog/2025/12/03/critical-security-vulnerability\n`;
   output += `  • https://nvd.nist.gov/vuln/detail/CVE-2025-55182\n`;
-  output += `  • https://react.dev/blog/2025/12/03/security-update\n`;
   output += `  • https://github.com/facebook/react/security/advisories\n\n`;
 
   return output;

@@ -15,11 +15,12 @@ Fast, accurate scanner for CVE-2025-55182 (React2Shell) - a critical remote code
 React2Shell is a **maximum severity (10.0 CVSS)** vulnerability in React Server Components that allows unauthenticated remote code execution. Attackers can exploit this through specially crafted HTTP requests to Server Function endpoints.
 
 **Key Facts:**
-- **Affected:** React 19.x and Next.js 15.x/16.x (with React 19)
+- **Affected:** React 19.x, Next.js 14-16.x, react-router, waku, @parcel/rsc, expo
 - **Attack Vector:** Network (no authentication required)
 - **Impact:** Complete server compromise (RCE)
 - **Disclosure:** December 3, 2025
 - **Exploitation:** Near 100% success rate in default configurations
+- **Related CVEs:** CVE-2025-55184 (DoS), CVE-2025-55183 (Source Exposure), CVE-2025-67779
 
 **⚠️ Critical Note:** Only React 19.x is vulnerable. React 18.x and earlier are NOT affected.
 
@@ -50,9 +51,10 @@ This tool performs intelligent vulnerability detection:
 - Confirms React 18.x apps are safe (prevents false positives)
 - Identifies react-server-dom-* packages
 
-### 2. **Next.js Configuration Check** 🟡 Warning
-- Scans Next.js 14.3.x-canary, 15.x, 16.x versions
-- Validates React 19 dependency (required for vulnerability)
+### 2. **Framework Configuration Check** 🟡 Warning
+- Scans Next.js 14.x-canary through 16.x versions
+- Detects react-router, waku, @parcel/rsc, @vitejs/plugin-rsc, rwsdk, expo
+- Validates React 19 dependency where required
 - Detects static export mode (Server Components disabled = safe)
 
 ### 3. **Smart False Positive Prevention** ✅ Accuracy
@@ -88,23 +90,40 @@ This tool performs intelligent vulnerability detection:
 - `react-server-dom-turbopack` 19.0.0 - 19.2.0
 
 **Next.js:**
+- `14.0.0` to `14.2.34`
 - `14.3.0-canary.0` to `14.3.0-canary.87`
-- `15.0.0` to `15.0.4`
+- `15.0.0` to `15.0.6`
 - `15.1.0` to `15.1.8`
 - `15.2.0` to `15.2.5`
 - `15.3.0` to `15.3.5`
 - `15.4.0` to `15.4.7`
 - `15.5.0` to `15.5.6`
-- `16.0.0` to `16.0.6`
+- `16.0.0` to `16.0.9`
+
+**Additional Affected Frameworks (per React official advisory):**
+- `react-router` 7.0.0 - 7.1.3
+- `waku` 0.21.0 - 0.21.5
+- `@parcel/rsc` 2.12.0 - 2.13.2
+- `@vitejs/plugin-rsc` 0.1.0 - 0.2.0
+- `rwsdk` (Redwood SDK) 0.1.0 - 0.4.0
+- `expo` 52.0.0 - 52.0.9
 
 ### Patched Versions
 
 **React:** `19.2.1` or later
 
 **Next.js:**
-- `14.3.0-canary.88+`
-- `15.0.5+`, `15.1.9+`, `15.2.6+`, `15.3.6+`, `15.4.8+`, `15.5.7+`
-- `16.0.7+`
+- `14.2.35+`, `14.3.0-canary.88+`
+- `15.0.7+`, `15.1.9+`, `15.2.6+`, `15.3.6+`, `15.4.8+`, `15.5.7+`
+- `16.0.10+`
+
+**Other Frameworks:**
+- `react-router`: `7.1.4+`
+- `waku`: `0.21.6+`
+- `@parcel/rsc`: `2.13.3+`
+- `@vitejs/plugin-rsc`: `0.2.1+`
+- `rwsdk`: `0.4.1+`
+- `expo`: `52.0.10+`
 
 ## 🚀 Getting Started
 
@@ -463,17 +482,29 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ./test-scanner.sh
 ```
 
-### Adding support for more frameworks
+### Supported Frameworks
 
-If you're using other RSC-enabled frameworks (Remix, Waku, etc.), please open an issue or submit a PR with detection logic.
+This scanner now detects all major RSC-enabled frameworks per the React official advisory:
+- ✅ React / react-server-dom-*
+- ✅ Next.js
+- ✅ react-router (with RSC APIs)
+- ✅ waku
+- ✅ @parcel/rsc
+- ✅ @vitejs/plugin-rsc
+- ✅ rwsdk (Redwood SDK)
+- ✅ expo
+
+For additional frameworks, please open an issue or submit a PR.
 
 ## References
 
+- [React Official Blog: Critical Security Vulnerability](https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components)
 - [NVD CVE-2025-55182](https://nvd.nist.gov/vuln/detail/CVE-2025-55182)
-- [React Security Advisory](https://react.dev/blog/2025/12/03/security-update)
 - [Wiz Research: React2Shell Analysis](https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182)
+- [Microsoft: Defending Against CVE-2025-55182](https://www.microsoft.com/en-us/security/blog/2025/12/15/defending-against-the-cve-2025-55182-react2shell-vulnerability-in-react-server-components/)
+- [AWS: China-nexus Groups Exploit React2Shell](https://aws.amazon.com/blogs/security/china-nexus-cyber-threat-groups-rapidly-exploit-react2shell-vulnerability-cve-2025-55182/)
+- [Datadog Security Labs: CVE-2025-55182 RCE Analysis](https://securitylabs.datadoghq.com/articles/cve-2025-55182-react2shell-remote-code-execution-react-server-components/)
 - [Tenable: CVE-2025-55182 FAQ](https://www.tenable.com/blog/react2shell-cve-2025-55182-react-server-components-rce)
-- [Vercel Advisory](https://vercel.com/changelog/cve-2025-55182)
 
 ## License
 

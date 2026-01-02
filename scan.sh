@@ -32,15 +32,38 @@ PATCHED_REACT_VERSION="19.2.1"
 
 # Next.js vulnerable version ranges (min-max pairs)
 NEXTJS_VULN_RANGES=(
+    "14.0.0:14.2.34"
     "14.3.0-canary.0:14.3.0-canary.87"
-    "15.0.0:15.0.4"
+    "15.0.0:15.0.6"
     "15.1.0:15.1.8"
     "15.2.0:15.2.5"
     "15.3.0:15.3.5"
     "15.4.0:15.4.7"
     "15.5.0:15.5.6"
-    "16.0.0:16.0.6"
+    "16.0.0:16.0.9"
 )
+
+# Additional affected frameworks (per React official advisory)
+VULN_REACT_ROUTER_VERSIONS=("7.0.0" "7.0.1" "7.0.2" "7.1.0" "7.1.1" "7.1.2" "7.1.3")
+PATCHED_REACT_ROUTER_VERSION="7.1.4"
+
+VULN_WAKU_VERSIONS=("0.21.0" "0.21.1" "0.21.2" "0.21.3" "0.21.4" "0.21.5")
+PATCHED_WAKU_VERSION="0.21.6"
+
+VULN_PARCEL_RSC_VERSIONS=("2.12.0" "2.13.0" "2.13.1" "2.13.2")
+PATCHED_PARCEL_RSC_VERSION="2.13.3"
+
+VULN_VITE_RSC_VERSIONS=("0.1.0" "0.1.1" "0.1.2" "0.2.0")
+PATCHED_VITE_RSC_VERSION="0.2.1"
+
+VULN_RWSDK_VERSIONS=("0.1.0" "0.2.0" "0.3.0" "0.4.0")
+PATCHED_RWSDK_VERSION="0.4.1"
+
+# Expo vulnerable version ranges
+EXPO_VULN_RANGES=(
+    "52.0.0:52.0.9"
+)
+PATCHED_EXPO_VERSION="52.0.10"
 
 # Global counters
 TOTAL_PROJECTS=0
@@ -189,15 +212,50 @@ get_nextjs_fix_version() {
 
     # Return appropriate patched version
     case "$major_minor" in
-        "15.0") echo "15.0.5" ;;
+        "14.0"|"14.1"|"14.2") echo "14.2.35" ;;
+        "14.3") echo "14.3.0-canary.88" ;;
+        "15.0") echo "15.0.7" ;;
         "15.1") echo "15.1.9" ;;
         "15.2") echo "15.2.6" ;;
         "15.3") echo "15.3.6" ;;
         "15.4") echo "15.4.8" ;;
         "15.5") echo "15.5.7" ;;
-        "16.0") echo "16.0.7" ;;
-        *) echo "16.0.7" ;; # Default to latest
+        "16.0") echo "16.0.10" ;;
+        *) echo "16.0.10" ;; # Default to latest
     esac
+}
+
+# Check if a version is in a simple list of versions
+is_version_in_list() {
+    local version=$1
+    shift
+    local versions=("$@")
+    version=$(echo "$version" | sed 's/^[\^~>=<]*//')
+
+    for vuln_ver in "${versions[@]}"; do
+        if [[ "$version" == "$vuln_ver" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Check if Expo version is vulnerable
+is_expo_vulnerable() {
+    local version=$1
+    version=$(echo "$version" | sed 's/^[\^~>=<]*//')
+
+    for range in "${EXPO_VULN_RANGES[@]}"; do
+        local min_ver=$(echo "$range" | cut -d':' -f1)
+        local max_ver=$(echo "$range" | cut -d':' -f2)
+
+        if [[ $(version_compare "$version" "$min_ver") -ge 0 ]] && \
+           [[ $(version_compare "$version" "$max_ver") -le 0 ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 # Get React major version
@@ -211,7 +269,7 @@ get_react_major_version() {
 is_static_export() {
     local project_path=$1
 
-    for config_file in "next.config.js" "next.config.mjs" "next.config.ts"; do
+    for config_file in "next.config.js" "next.config.mjs" "next.config.ts" "next.config.cjs"; do
         local config_path="$project_path/$config_file"
         if [[ -f "$config_path" ]]; then
             if grep -q "output: ['\"]export['\"]" "$config_path"; then
@@ -287,6 +345,52 @@ scan_project() {
             local fix_version=$(get_nextjs_fix_version "$next_version")
             vulnerable_packages+=("next:$next_version:$fix_version")
         fi
+    fi
+
+    # Check Expo - only vulnerable if React 19 is present
+    local expo_version=$(jq -r '.dependencies.expo // .devDependencies.expo // "null"' "$package_json")
+    if [[ "$expo_version" != "null" ]] && is_expo_vulnerable "$expo_version"; then
+        if [[ "$react_major" != "19" ]]; then
+            warnings+=("expo $expo_version is in vulnerable range, but using React $react_major (safe - only React 19 affected)")
+        else
+            vulnerable=true
+            vulnerable_packages+=("expo:$expo_version:$PATCHED_EXPO_VERSION")
+        fi
+    fi
+
+    # Check react-router (direct RSC framework - always vulnerable if in range)
+    local react_router_version=$(jq -r '.dependencies."react-router" // .devDependencies."react-router" // "null"' "$package_json")
+    if [[ "$react_router_version" != "null" ]] && is_version_in_list "$react_router_version" "${VULN_REACT_ROUTER_VERSIONS[@]}"; then
+        vulnerable=true
+        vulnerable_packages+=("react-router:$react_router_version:$PATCHED_REACT_ROUTER_VERSION")
+    fi
+
+    # Check waku
+    local waku_version=$(jq -r '.dependencies.waku // .devDependencies.waku // "null"' "$package_json")
+    if [[ "$waku_version" != "null" ]] && is_version_in_list "$waku_version" "${VULN_WAKU_VERSIONS[@]}"; then
+        vulnerable=true
+        vulnerable_packages+=("waku:$waku_version:$PATCHED_WAKU_VERSION")
+    fi
+
+    # Check @parcel/rsc
+    local parcel_rsc_version=$(jq -r '.dependencies."@parcel/rsc" // .devDependencies."@parcel/rsc" // "null"' "$package_json")
+    if [[ "$parcel_rsc_version" != "null" ]] && is_version_in_list "$parcel_rsc_version" "${VULN_PARCEL_RSC_VERSIONS[@]}"; then
+        vulnerable=true
+        vulnerable_packages+=("@parcel/rsc:$parcel_rsc_version:$PATCHED_PARCEL_RSC_VERSION")
+    fi
+
+    # Check @vitejs/plugin-rsc
+    local vite_rsc_version=$(jq -r '.dependencies."@vitejs/plugin-rsc" // .devDependencies."@vitejs/plugin-rsc" // "null"' "$package_json")
+    if [[ "$vite_rsc_version" != "null" ]] && is_version_in_list "$vite_rsc_version" "${VULN_VITE_RSC_VERSIONS[@]}"; then
+        vulnerable=true
+        vulnerable_packages+=("@vitejs/plugin-rsc:$vite_rsc_version:$PATCHED_VITE_RSC_VERSION")
+    fi
+
+    # Check rwsdk (Redwood SDK)
+    local rwsdk_version=$(jq -r '.dependencies.rwsdk // .devDependencies.rwsdk // "null"' "$package_json")
+    if [[ "$rwsdk_version" != "null" ]] && is_version_in_list "$rwsdk_version" "${VULN_RWSDK_VERSIONS[@]}"; then
+        vulnerable=true
+        vulnerable_packages+=("rwsdk:$rwsdk_version:$PATCHED_RWSDK_VERSION")
     fi
 
     # Store results
@@ -439,9 +543,12 @@ print_warnings() {
 print_footer() {
     cat << EOF
 ${DIM}─────────────────────────────────────────────────────────────${RESET}
+${DIM}Related CVEs:${RESET} CVE-2025-55184 (DoS), CVE-2025-55183 (Source Exposure)
+${DIM}Affected:${RESET} React, Next.js, react-router, waku, @parcel/rsc, expo
+
 ${DIM}References:${RESET}
+  • https://react.dev/blog/2025/12/03/critical-security-vulnerability
   • https://nvd.nist.gov/vuln/detail/CVE-2025-55182
-  • https://react.dev/blog/2025/12/03/security-update
   • https://github.com/facebook/react/security/advisories
 
 EOF
